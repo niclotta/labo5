@@ -11,30 +11,32 @@ import matplotlib.pyplot as plt
 import trackpy as tp
 import pims
 
-print(f"Version de trackpy: {tp.__version__}")
+# print(f"Version de trackpy: {tp.__version__}")
+# v0.7
 
+@pims.pipeline
 def g(img):
     return img[:, :, 1]
 
 def track_vid(v_in):
   frames = pims.open(v_in)
-  ppf_x = []
-  ppf_y = []
-  part = tp.locate(g(frames[0]), invert=True, diameter=41, minmass=2.1e4)
-  for i in range(11):
-    p = tp.locate(g(frames[i]), invert=True, diameter=41, minmass=2.1e4)
-    print(p)
-    #ppf_x.append(p['x'])
-    #ppf_y.append(p['y'])
-#  plt.plot(ppf_x, ppf_y)
-#  plt.show()
-  #plt.hist(part['mass'], bins=20)
-  #plt.show()
-  print(part.head())
-  tp.annotate(part, frames[0])
-  #plt.imshow(frames[0], cmap = "gray")
+  tp.quiet()
+  q = tp.link(tp.batch(list(g(frames)), invert=True, diameter=41, threshold=1.2, minmass=1.85e4), 30, memory=2)
+  print(q)
+  tp.annotate(q[(q['particle'] == 0) & (q['frame'] == 0)], frames[0])
+#  plt.imshow(frames[0])
+#  tp.plot_traj(q[q['particle'] == 0])
   plt.show()
+  for i in range(2):
+    tp.plot_traj(q[q['particle'] == i])
+    plt.show()
 
-track_vid("data/sinlaser_0.avi")
+
+
+  #plt.hist(part['mass'], bins=20)
+  #plt.imshow(frames[0], cmap = "gray")
+
+if __name__ == '__main__':
+  track_vid("data/sinlaser_0.avi")
 
 # eof
