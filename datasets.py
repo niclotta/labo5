@@ -6,11 +6,15 @@ Created on Fri May  1 16:19:25 2026
 @author: nclotta
 """
 
-# Time-stamp: </Users/nclotta/Documents/__UBA/__LABO_5_CINCO/pinzas/datasets.py, 2026-05-01 Friday 18:22:48 nclotta>
+# Time-stamp: </Users/nclotta/Documents/__UBA/__LABO_5_CINCO/pinzas/datasets.py, 2026-05-01 Friday 18:38:48 nclotta>
 
-# todas las particulas estan seleccionadas
-# considerando (41 * 1.2) px de desplazamiento
-# posible y memoria=40 frames
+# La mayoria de las particulas estan seleccionadas
+# considerando (41 * 1.2) px de desplazamiento posible
+# y con 40 frames de memoria para la posicion.
+
+# Las muestras nuevas (latex[0-9]+) tienen mucha menor
+# intensidad ademas de tomar 30 px como despl. pos. y
+# solamente 20 frames de memoria.
 
 # sinlaser_{i}.avi
 sinlaser = [
@@ -60,10 +64,8 @@ atrapada = [
     ]
 
 # 10_25/latex25_agua10_{i}.avi
-# 
-# 
 latex25 = [
-      # d, thr, minmss, p
+      # d, thr, mnm, p
       [41, 1.2, 5e3, []],
       [41, 1.2, 5e3, []],
       [41, 1.2, 5e3, []],
@@ -80,10 +82,8 @@ latex25 = [
     ]
 
 # 66_33/latex33_{i}.avi
-# 
-# 
 latex33 = [
-      # d, thr, minmss, p
+      # d, thr, mnm, p
       [41, 1.2, 5e3, []],
       [41, 1.2, 5e3, []],
       [41, 1.2, 5e3, []],
@@ -107,10 +107,8 @@ latex33 = [
     ]
 
 # latex_100/latex100_{i}.avi
-# 
-#
 latex100 = [
-      # d, thr, minmss, p
+      # d, thr, mnm, p
       [41, 1.2, 5e3, []],
       [41, 1.2, 5e3, []],
       [41, 1.2, 5e3, []],
@@ -127,7 +125,7 @@ latex100 = [
       [41, 1.2, 5e3, []],
       [41, 1.2, 5e3, []]
     ]
-
+"""
 # particulaatrapada_{i}.avi
 # particulas en browniano al mover la plataforma, NO es deriva normal
 derivafzda = [
@@ -148,15 +146,15 @@ derivafzda = [
       [41, 1.2, 1.85e4, []],
       [41, 1.2, 1.85e4, []]
     ]
-
+"""
 # array con todos los datasets y sus paths asociados
-todo = [#[sinlaser, "sinlaser", 40, 0],
-#        [partatrapada, "particulaatrapada", 40, 0],
-#        [atrapada, "atrapada", 40, 0],
+todo = [[sinlaser, "sinlaser", 40, 0],
+        [partatrapada, "particulaatrapada", 40, 0],
+        [atrapada, "atrapada", 40, 0],
 #        [derivafzda, "particulaatrapada", 40, 0],
         [latex25, "10_25/latex25_agua10", 20, 30],
         [latex33, "66_33/latex33", 20, 30],
-#        [latex100, "latex_100/latex100", 20, 30]
+        [latex100, "latex_100/latex100", 20, 30]
     ]
 
 # eof
