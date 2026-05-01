@@ -6,7 +6,7 @@ Created on Tue Apr 21 20:16:22 2026
 @author: nclotta
 """
 
-# Time-stamp: </Users/nclotta/Documents/__UBA/__LABO_5_CINCO/pinzas/trackeo.py, 2026-05-01 Friday 16:45:18 nclotta>
+# Time-stamp: </Users/nclotta/Documents/__UBA/__LABO_5_CINCO/pinzas/trackeo.py, 2026-05-01 Friday 18:23:08 nclotta>
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -25,16 +25,23 @@ import datasets
 def g(img):
     return img[:, :, 1]
 
-def track_vid(v_in, n, data, graph=False, imgpath="./img"):
+def track_vid(v_in, n, data, graph=False, imgpath="./img", mem=40, sr=0):
   frames = pims.open(v_in)
   tp.quiet()
+  if sr == 0:
+    search_range = data[n][0]*data[n][1]
+  else:
+    search_range = sr
   q = tp.link(tp.batch(list(g(frames)), invert=True,
-                         diameter=data[n][0],
-                         threshold=data[n][1],
-                         minmass=data[n][2]), data[n][0]*data[n][1], memory=40)
+                       diameter=data[n][0], threshold=data[n][1],
+                       minmass=data[n][2]), search_range=search_range, memory=mem)
+  print(q['particle'].max())
   if graph:
     plt.hist(q['particle'], bins=q['particle'].max(), ec='r', color='skyblue')
     plt.savefig(f"{imgpath}/{Path(v_in).stem}_histo_parts.png", dpi=300)
+    plt.close()
+    plt.hist(q['mass'], bins=q['particle'].max(), ec='r', color='skyblue')
+    plt.savefig(f"{imgpath}/{Path(v_in).stem}_histo_mass.png", dpi=300)
     plt.close()
     if len(data[n][3]) > 0:
       n_parts = len(data[n][3])
@@ -60,7 +67,7 @@ if __name__ == '__main__':
       if dataset[0][n][0] > 0:
         if not os.path.exists(f"./img/{dataset[1]}"):
           os.makedirs(f"./img/{dataset[1]}")
-        track_vid(f"data/{dataset[1]}_{n}.avi", n, dataset[0],
-                    graph=True, imgpath=f"./img/{dataset[1]}")
+        track_vid(f"data/{dataset[1]}_{n}.avi", n, dataset[0], graph=True,
+                  imgpath=f"./img/{dataset[1]}", mem=dataset[2], sr=dataset[3])
 
 # eof
