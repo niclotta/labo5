@@ -1,0 +1,214 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Análisis de MSD
+
+@author: bruno
+"""
+
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+from scipy.stats import linregress
+from scipy.optimize import curve_fit
+import os
+import glob
+import datasets
+
+#defino constantes
+kB  = 1.380649e-23   
+T   = 298.0          #K, puse por poner aprox pero podemos cambiarla.
+R   = 0.5e-6         # m puse 1 mu de diámetro pero hay que estimarlo con los videos y la escala
+
+
+#esto habria que verlo bien puse unas re a ojo pero se podrían sacar
+VISCOSIDADES = {
+    "sinlaser":               1.00e-3,  
+    "10_25/latex25_agua10":   1.10e-3,   
+    "66_33/latex33":          1.25e-3,   
+    "latex_100/latex100":     1.50e-3,  
+}
+
+R2_MIN      = 0.95   
+FRAC_AJUSTE = 1/3    
+
+#modelos
+
+def msd_libre(tau, D):
+    return 4 * D * tau
+
+def msd_trampa(tau, D, kappa, gamma):
+    tau_c = gamma / kappa
+    return (4 * kB * T / kappa) * (1 - np.exp(-tau / tau_c))
+
+
+def cargar_msds(dataset_name):
+    patron = f"./img/{dataset_name}/*_msd.csv"
+    archivos = sorted(glob.glob(patron))
+    if not archivos:
+        print("error")
+        return []
+    msds = []
+    for f in archivos:
+        df = pd.read_csv(f, index_col='lagt')
+        df.attrs['archivo'] = f
+        msds.append(df)
+    return msds
+
+#browniano libre que descarta las que dan con R cuadrado feo
+
+def ajustar_difusion(msds, dataset_name, graficar=True):
+    D_vals = []
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    for df in msds:
+        tau = df.index.values
+        msd = df['msd'].values
+        n   = max(2, len(tau) // int(1/FRAC_AJUSTE))
+
+        slope, intercept, r, *_ = linregress(tau[:n], msd[:n])
+        if r**2 < R2_MIN:
+            continue
+
+        D = slope / 4
+        D_vals.append(D)
+
+        tau_fit = np.linspace(0, tau[-1], 200)
+        ax.plot(tau, msd, alpha=0.3, lw=1)
+        ax.plot(tau_fit, msd_libre(tau_fit, D), lw=1.5,
+                label=f"D={D:.4f} µm²/s (R²={r**2:.3f})")
+
+    ax.set_xlabel("n Delta t [s]")
+    ax.set_ylabel("MSD")
+    ax.set_title(f"difusión libre — {dataset_name}")
+    ax.legend(fontsize=7)
+    plt.tight_layout()
+    os.makedirs(f"./img/{dataset_name}", exist_ok=True)
+    plt.close()
+
+    if D_vals:
+        D_mean = np.mean(D_vals)
+        D_std  = np.std(D_vals)
+        print(f"  {dataset_name}")
+        print(f"    partículas aceptadas: {len(D_vals)}")
+        print(f"    D = {D_mean:.4f} ± {D_std:.4f} µm²/s")
+        #valor teórico einstein-stokes
+        eta = VISCOSIDADES.get(dataset_name, None)
+        if eta:
+            D_teo = kB * T / (6 * np.pi * eta * R) * 1e12  
+            print(f"    D_ES (teórico) = {D_teo:.4f} µm²/s  (η={eta*1e3:.2f} mPa·s)")
+    else:
+        D_mean, D_std = np.nan, np.nan
+
+    return np.array(D_vals)
+
+#lo mismo para la trampa
+
+def ajustar_trampa(msds, dataset_name):
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    for df in msds:
+        tau = df.index.values
+        msd = df['msd'].values
+
+        plateau = np.mean(msd[-len(msd)//5:])
+        kappa_0 = 4 * kB * T / (plateau * 1e-12) if plateau > 0 else 1e-6
+        gamma_0 = 6 * np.pi * VISCOSIDADES.get("sinlaser", 1e-3) * R
+
+        try:
+            popt, pcov = curve_fit(
+                msd_trampa, tau, msd,
+                p0=[kB*T/gamma_0*1e12, kappa_0, gamma_0],
+                maxfev=10000, bounds=(0, np.inf)
+            )
+            D_fit, kappa_fit, gamma_fit = popt
+            tau_c = gamma_fit / kappa_fit
+            kappa_pN = kappa_fit * 1e6   # pN/µm
+
+            tau_fit = np.linspace(0, tau[-1], 500)
+            ax.plot(tau, msd, alpha=0.4, lw=1)
+            ax.plot(tau_fit, msd_trampa(tau_fit, *popt), lw=2,
+                    label=f"κ={kappa_pN:.2f} pN/µm, τ_c={tau_c:.3f} s")
+            print(f"  {dataset_name}: κ = {kappa_pN:.3f} pN/µm,  τ_c = {tau_c:.4f} s")
+
+        except RuntimeError:
+            print(f"error")
+            ax.plot(tau, msd, alpha=0.3, lw=1, color='gray')
+
+    ax.set_xlabel("n Delta t [s]")
+    ax.set_ylabel("MSD")
+    ax.set_title("Trampa óptica")
+    plt.close()
+
+#D contra 1 / eta para comparar con la teoria
+
+def einstein_stokes(resultados):
+
+    etas, Ds, Ds_err = [], [], []
+    for nombre, D_arr in resultados.items():
+        eta = VISCOSIDADES.get(nombre, None)
+        if eta and len(D_arr) > 0:
+            etas.append(1/eta)
+            Ds.append(np.mean(D_arr))
+            Ds_err.append(np.std(D_arr))
+
+    if len(etas) < 2:
+        return
+
+    etas    = np.array(etas)
+    Ds      = np.array(Ds)
+    Ds_err  = np.array(Ds_err)
+
+    slope, intercept, r, *_ = linregress(etas, Ds)
+    R_exp = slope * 6 * np.pi / (kB * T) * 1e-12  # radio experimental en µm
+    R_exp_nm = R_exp * 1e3
+
+    fig, ax = plt.subplots(figsize=(6, 5))
+    ax.errorbar(etas*1e-3, Ds, yerr=Ds_err, fmt='o', capsize=4, label='Datos')
+    x_fit = np.linspace(0, max(etas)*1.1, 200)
+    ax.plot(x_fit*1e-3, slope*x_fit + intercept, '--',
+            label=f"(R²={r**2:.3f})\nR_exp = {R_exp_nm:.0f} nm")
+    ax.set_xlabel("1/eta [1/(mPa·s)]")
+    ax.set_ylabel("D [µm²/s]")
+    ax.set_title("relación de einstein-stokes")
+    plt.close()
+    print(f"\ einstein-Stokes: radio experimental = {R_exp_nm:.1f} nm")
+
+
+if __name__ == '__main__':
+    print("=" * 60)
+    print("pinzas ópticas")
+    print("=" * 60)
+
+    datasets_libres = [
+        "sinlaser",
+        "10_25/latex25_agua10",
+        "66_33/latex33",
+        "latex_100/latex100",
+    ]
+
+    datasets_trampa = [
+        "particulaatrapada",
+        "atrapada",
+    ]
+
+    resultados_D = {}
+
+    print("difusión libre")
+    for nombre in datasets_libres:
+        msds = cargar_msds(nombre)
+        if msds:
+            D_arr = ajustar_difusion(msds, nombre)
+            resultados_D[nombre] = D_arr
+
+    print("trampa óptica")
+    for nombre in datasets_trampa:
+        msds = cargar_msds(nombre)
+        if msds:
+            ajustar_trampa(msds, nombre)
+
+    print("einstein stokes")
+    einstein_stokes(resultados_D)
+
+# eof
