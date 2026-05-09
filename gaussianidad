@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Análisis de MSD
+
+@author: bruno
+"""
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.stats import norm, probplot, skew, kurtosis
+from scipy.stats import linregress
+import glob
+
+CARPETA = '/content/'
+archivos = glob.glob(f'{CARPETA}*_msd.csv')
+
+um_per_px = 1 / 11.1943
+fps = 15
+lags_a_testear = [1, 2, 4, 8, 16, 32]
+
+archivos_trajs = glob.glob('/content/*_trajs.csv')
+print(f"Archivos de trayectorias: {len(archivos_trajs)}")
+
+def obtener_desplazamientos_trajs(archivos, lag):
+    dx_total = []
+    for archivo in archivos:
+        df = pd.read_csv(archivo, index_col=0)
+        if df.isnull().all().all():
+            continue
+        for pid, grupo in df.groupby('particle'):
+            grupo = grupo.sort_values('frame')
+            x = grupo['x'].values * um_per_px 
+            if len(x) <= lag:
+                continue
+            dx = x[lag:] - x[:-lag]
+            dx_total.extend(dx)
+    return np.array(dx_total)
+
+datasets_trajs = {
+    'latex25': [f for f in archivos_trajs if 'latex25' in f],
+    'latex33': [f for f in archivos_trajs if 'latex33' in f],
+    'latex100': [f for f in archivos_trajs if 'latex100' in f],
+    'sinlaser': [f for f in archivos_trajs if 'sinlaser' in f],
+}
+
+for nombre_dataset, archivos_dataset in datasets_trajs.items():
+    if not archivos_dataset:
+        print(f"no se encontró nada para {nombre_dataset}")
+        continue
+
+    fig, axes = plt.subplots(2, 3, figsize=(14, 8))
+    axes = axes.flatten()
+
+    print(f"DATASET: {nombre_dataset}")
+    
+
+    for idx, lag in enumerate(lags_a_testear):
+        dx = obtener_desplazamientos_trajs(archivos_dataset, lag)
+        if len(dx) < 20:
+            continue
+        tau = lag / fps
+        ax = axes[idx]
+        probplot(dx, dist="norm", plot=ax)
+        s = skew(dx)
+        k = kurtosis(dx, fisher=False)
+        ax.set_title(f"τ = {tau:.2f} s\nskew={s:.2f}, kurt={k:.2f}", fontsize=10)
+        ax.grid(alpha=0.3)
+        print(f"τ={tau:.2f}s  N={len(dx)}  skew={s:.3f}  kurt={k:.3f}")
+
+    plt.suptitle(f"QQ-plots — {nombre_dataset}", fontsize=14)
+    plt.tight_layout()
+    plt.savefig(f'/content/qqplots_{nombre_dataset}.png', dpi=300)
+    plt.show()
+
+    # eof
