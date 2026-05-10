@@ -1,0 +1,385 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Ajusta todo lo de difusión: ley de potencias, lineal, después compara las alpha y
+calcula la dimensión fractal. Funciona con los archivos que traen las trayectorias.
+"""
+!pip install trackpy
+import glob
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import trackpy as tp
+from scipy.stats import linregress
+
+
+#Configuración general
+
+
+um_per_px = 1 / 11.1943
+fps = 15
+max_lagtime = 50
+
+plt.style.use('seaborn-v0_8-whitegrid')
+
+colores = {
+    'Datos con $\eta_1$': 'steelblue',
+    'Datos con $\eta_2$':  'seagreen',
+    'Datos con $\eta_3$':  'orange',
+    'Datos con $\eta_4$': 'crimson',
+}
+
+
+
+#Archivos
+
+
+archivos_trajs = glob.glob('/content/*_trajs.csv')
+
+datasets = {
+
+    rf'Datos con $\eta_1$': [f for f in archivos_trajs if 'sinlaser' in f],
+
+    rf'Datos con $\eta_2$': [f for f in archivos_trajs if 'latex25' in f],
+
+    rf'Datos con $\eta_3$': [f for f in archivos_trajs if 'latex33' in f],
+
+    rf'Datos con $\eta_4$': [f for f in archivos_trajs if 'latex100' in f]
+
+
+}
+
+for nombre, archivos in datasets.items():
+    print(f"{nombre}: {len(archivos)} archivos")
+
+#Función de sustracción de deriva
+
+def substraer_drift(df):
+
+    df = df.copy().sort_values(['particle', 'frame'])
+
+    drift = df.groupby('frame')[['x', 'y']].mean()
+    drift = drift - drift.iloc[0]
+
+    drift.columns = ['dx_drift', 'dy_drift']
+
+    df = df.join(drift, on='frame')
+
+    df['x'] -= df['dx_drift']
+    df['y'] -= df['dy_drift']
+
+    return df[['x', 'y', 'frame', 'particle']]
+
+#Función para calcular el MSD:
+
+def calcular_msd_ensemble(
+    archivos,
+    corregir_drift=False,
+    max_lagtime=50
+):
+
+    msds = []
+
+    for archivo in archivos:
+
+        df = pd.read_csv(archivo, index_col=0)
+
+        if df.isnull().all().all():
+            continue
+
+        if corregir_drift:
+            df = substraer_drift(df)
+
+        for _, grupo in df.groupby('particle'):
+
+            grupo = grupo.sort_values('frame')
+
+            if len(grupo) < 10:
+                continue
+
+            try:
+
+                msd = tp.msd(
+                    grupo,
+                    mpp=um_per_px,
+                    fps=fps,
+                    max_lagtime=max_lagtime
+                )
+
+                if msd['msd'].iloc[0] > 1e-3:
+                    msds.append(msd.set_index('lagt')['msd'])
+
+            except Exception:
+                continue
+
+    if not msds:
+        return None
+
+    combinado = pd.concat(msds, axis=1)
+
+    return {
+        'tau': combinado.index.values,
+        'mean': combinado.mean(axis=1).values,
+        'std': combinado.std(axis=1).values,
+        'N': combinado.shape[1]
+    }
+
+#Función para ajustar alpha.
+
+def ajustar_alpha(tau, msd, tau_max=2):
+
+    mask = (tau < tau_max) & (msd > 0)
+
+    slope, intercept, r, *_ = linregress(
+        np.log(tau[mask]),
+        np.log(msd[mask])
+    )
+
+    return {
+        'alpha': slope,
+        'intercept': intercept,
+        'R2': r**2,
+        'mask': mask
+    }
+
+#MSD: ajuste para la ley de potencias y lineal.
+
+kB = 1.380649e-23  # J/K
+T  = 298.0         # K
+R  = 0.5e-6        # m
+
+TAU_MAX_LINEAL = 1.0  
+
+#MSD en log-log y ajuste de alpha
+
+fig, ax = plt.subplots(figsize=(9, 6))
+
+resultados = {}
+
+print(f"\n{'Dataset':<25} {'α':>8} {'R²':>8}")
+print("-" * 43)
+
+for nombre, archivos in datasets.items():
+
+    corregir = nombre != r'Datos con $\eta_1$'
+
+    datos = calcular_msd_ensemble(
+        archivos,
+        corregir_drift=corregir,
+        max_lagtime=max_lagtime
+    )
+
+    if datos is None:
+        continue
+
+    fit = ajustar_alpha(datos['tau'], datos['mean'])
+    resultados[nombre] = {**datos, **fit}
+
+    print(f"{nombre:<25} {fit['alpha']:>8.3f} {fit['R2']:>8.3f}")
+
+    ax.fill_between(
+        datos['tau'],
+        datos['mean'] - datos['std'],
+        datos['mean'] + datos['std'],
+        alpha=0.15, color=colores[nombre]
+    )
+    ax.plot(
+        datos['tau'], datos['mean'],
+        lw=2, color=colores[nombre],
+        label=rf"{nombre} — $\alpha={fit['alpha']:.2f}$"
+    )
+
+    tau_fit = np.logspace(
+        np.log10(datos['tau'][fit['mask']][0]),
+        np.log10(datos['tau'][fit['mask']][-1]),
+        100
+    )
+    ax.plot(tau_fit,
+            np.exp(fit['intercept']) * tau_fit**fit['alpha'],
+            '--', color=colores[nombre], lw=1.5)
+
+ax.set_xscale('log')
+ax.set_yscale('log')
+ax.set_xlim(0.05, 5)
+ax.set_xlabel(r'Lag time $\tau$ [s]')
+ax.set_ylabel(r'MSD ensemble [$\mu m^2$]')
+ax.set_title('MSD ensemble — difusión anómala')
+ax.legend()
+plt.tight_layout()
+plt.savefig('/content/msd_alpha_final.png', dpi=300)
+plt.show()
+
+#MSD lineal con ajuste del D.
+
+fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+
+print(f"\n── Coeficiente de difusión aparente (τ < {TAU_MAX_LINEAL} s) ──")
+print(f"{'Dataset':<25} {'intercepto':>12} {'D_ap [µm²/s]':>14} "
+      f"{'R²':>8} {'η_ap [mPa·s]':>14}")
+print("-" * 76)
+
+D_resultados = {}
+
+for ax, (nombre, archivos) in zip(axes.flatten(), datasets.items()):
+
+    corregir = nombre != r'Datos con $\eta_1$'
+
+    datos = calcular_msd_ensemble(
+        archivos,
+        corregir_drift=corregir,
+        max_lagtime=max_lagtime
+    )
+
+    if datos is None:
+        continue
+
+    tau = datos['tau']
+    msd = datos['mean']
+    std = datos['std']
+
+    #saca el intercept 
+    mask_lineal       = tau < TAU_MAX_LINEAL
+    slope, intercept, r, *_ = linregress(tau[mask_lineal], msd[mask_lineal])
+    D_ap  = slope / 4
+    eta_ap = kB * T / (6 * np.pi * D_ap * 1e-12 * R) * 1e3
+
+    D_resultados[nombre] = {
+        'D_ap': D_ap, 'eta_ap': eta_ap,
+        'intercept': intercept, 'R2': r**2
+    }
+
+    nota = 'Einstein-Stokes' if nombre == r'Datos con $\eta_1$' else 'D aparente'
+    print(f"{nombre:<25} {intercept:>12.4f} {D_ap:>14.4f} "
+          f"{r**2:>8.3f} {eta_ap:>12.2f}  ({nota})")
+
+    
+    ax.fill_between(tau, msd - std, msd + std,
+                    alpha=0.2, color=colores[nombre])
+    ax.plot(tau, msd, 'o-', color=colores[nombre],
+            lw=1.5, markersize=3)
+
+    tau_fit = np.linspace(0, tau[mask_lineal][-1], 100)
+    ax.plot(tau_fit, slope * tau_fit + intercept,
+            'k--', lw=1.5, alpha=0.8,
+            label=rf"$D_{{ap}}$={D_ap:.4f} µm²/s  (R²={r**2:.3f})")
+
+    ax.axvline(TAU_MAX_LINEAL, color='gray', linestyle=':', lw=1, alpha=0.5)
+    ax.set_xlabel(r'$\tau$ [s]')
+    ax.set_ylabel(r'MSD [$\mu m^2$]')
+    ax.set_title(nombre)
+    ax.set_xlim(tau[0] * 0.5, tau[-1])
+    ax.legend(fontsize=8)
+
+plt.suptitle(
+    rf'MSD en escala lineal — ajuste hasta $\tau$ = {TAU_MAX_LINEAL} s',
+    fontsize=13
+)
+plt.tight_layout()
+plt.savefig('/content/msd_lineal.png', dpi=300)
+plt.show()
+
+#valores del agua pura para comparar
+
+D_ES_agua = kB * T / (6 * np.pi * 0.89e-3 * R) * 1e12
+print(f"\nReferencia — D Einstein-Stokes (agua pura, R=0.5 µm): "
+      f"{D_ES_agua:.4f} µm²/s")
+print(f"Referencia — η agua pura: 0.89 mPa·s")
+
+#figura resumen
+
+
+fig, axes = plt.subplots(1, 2, figsize=(15,5))
+
+
+#alpha
+
+
+ax = axes[0]
+
+nombres = list(resultados.keys())
+
+alphas = [
+    resultados[n]['alpha']
+    for n in nombres
+]
+
+bars = ax.bar(
+    nombres,
+    alphas,
+    color=[colores[n] for n in nombres],
+    edgecolor='white',
+    alpha=0.85
+)
+
+ax.axhline(
+    1,
+    color='k',
+    linestyle='--',
+    alpha=0.5
+)
+
+ax.set_ylabel(r'Exponente $\alpha$')
+ax.set_title('Difusión anómala')
+
+for bar, val in zip(bars, alphas):
+
+    ax.text(
+        bar.get_x() + bar.get_width()/2,
+        val + 0.02,
+        f'{val:.2f}',
+        ha='center'
+    )
+
+
+#Dimensión fractal
+
+
+ax = axes[1]
+
+D_frac = {
+    n: 2 - resultados[n]['alpha']/2
+    for n in nombres
+}
+
+vals_frac = [
+    D_frac[n]
+    for n in nombres
+]
+
+bars = ax.bar(
+    nombres,
+    vals_frac,
+    color=[colores[n] for n in nombres],
+    edgecolor='white',
+    alpha=0.85
+)
+
+ax.axhline(
+    1.5,
+    color='k',
+    linestyle='--',
+    alpha=0.5
+)
+
+ax.set_ylabel(r'$D_f = 2 - \alpha/2$')
+ax.set_title('Dimensión fractal')
+
+for bar, val in zip(bars, vals_frac):
+
+    ax.text(
+        bar.get_x() + bar.get_width()/2,
+        val + 0.02,
+        f'{val:.2f}',
+        ha='center'
+    )
+
+
+plt.tight_layout()
+
+plt.savefig(
+    '/content/resumen_difusion_final.png',
+    dpi=300
+)
+
+plt.show()
