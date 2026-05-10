@@ -1,0 +1,392 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Análisis completo de la trampa óptica.
+"""
+
+
+import glob
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from scipy.stats import gaussian_kde
+from scipy.optimize import curve_fit
+
+plt.style.use('seaborn-v0_8-whitegrid')
+
+plt.rcParams.update({
+    'figure.dpi': 120,
+    'savefig.dpi': 300,
+    'font.size': 12,
+    'axes.titlesize': 14,
+    'axes.labelsize': 12,
+    'axes.spines.top': False,
+    'axes.spines.right': False,
+})
+
+
+#constantes
+
+kB = 1.380649e-23      # J/K
+T  = 298               # K
+
+um_per_px = 1 / 11.1943
+fps = 15
+
+# conversión µm → m
+um_to_m = 1e-6
+
+
+#archivos útiles.
+
+archivos_trampa = [
+
+    '/content/particulaatrapada_10_trajs.csv',
+    '/content/particulaatrapada_11_trajs.csv',
+    '/content/particulaatrapada_12_trajs.csv',
+    '/content/particulaatrapada_2_trajs.csv',
+    '/content/particulaatrapada_3_trajs.csv',
+    '/content/atrapada_0_trajs.csv',
+    '/content/atrapada_1_trajs.csv',
+
+]
+
+print(f'Trayectorias encontradas: {len(archivos_trampa)}')
+
+
+#msd
+
+def calcular_msd(x, y, max_lag=100):
+
+    N = len(x)
+
+    lags = np.arange(1, min(max_lag, N//2))
+
+    msd_x = []
+    msd_y = []
+    msd_r = []
+
+    for lag in lags:
+
+        dx = x[lag:] - x[:-lag]
+        dy = y[lag:] - y[:-lag]
+
+        msd_x.append(np.mean(dx**2))
+        msd_y.append(np.mean(dy**2))
+        msd_r.append(np.mean(dx**2 + dy**2))
+
+    tau = lags / fps
+
+    return (
+        tau,
+        np.array(msd_x),
+        np.array(msd_y),
+        np.array(msd_r)
+    )
+
+
+#
+
+x_total = []
+y_total = []
+
+msd_all = []
+
+kappas_x = []
+kappas_y = []
+
+
+#loop
+
+for archivo in archivos_trampa:
+
+    df = pd.read_csv(archivo)
+
+    if df.isnull().all().all():
+        continue
+
+    for pid, grupo in df.groupby('particle'):
+
+        grupo = grupo.sort_values('frame')
+
+        x_raw = grupo['x'].values * um_per_px
+        y_raw = grupo['y'].values * um_per_px
+
+        # ---------------------------------
+        # versión centrada SOLO para plots
+        # ---------------------------------
+
+        x = x_raw - np.mean(x_raw)
+        y = y_raw - np.mean(y_raw)
+
+
+        if len(x) < 20:
+            continue
+
+        # centrar trayectoria
+        x = x - np.mean(x)
+        y = y - np.mean(y)
+
+        x_total.extend(x)
+        y_total.extend(y)
+
+        #equipartición
+
+        var_x = np.var(x_raw) * (um_to_m**2)
+        var_y = np.var(y_raw) * (um_to_m**2)
+
+        kappa_x = kB * T / var_x
+        kappa_y = kB * T / var_y
+
+        kappas_x.append(kappa_x)
+        kappas_y.append(kappa_y)
+
+        #msd
+
+
+        tau, msd_x, msd_y, msd_r = calcular_msd(
+            x,
+            y,
+            max_lag=100
+        )
+
+        msd_all.append(msd_r)
+
+#valores medios
+
+kappa_x_mean = np.mean(kappas_x)
+kappa_y_mean = np.mean(kappas_y)
+
+kappa_x_std = np.std(kappas_x)
+kappa_y_std = np.std(kappas_y)
+
+anisotropia = kappa_x_mean / kappa_y_mean
+
+print('\nRESULTADOS\n')
+
+print(f'κx = {kappa_x_mean:.3e} ± {kappa_x_std:.3e} N/m')
+print(f'κy = {kappa_y_mean:.3e} ± {kappa_y_std:.3e} N/m')
+
+print(f'\nAnisotropía κx/κy = {anisotropia:.3f}')
+
+
+
+#msd ensemble
+
+
+msd_df = pd.concat(
+
+    [pd.Series(m) for m in msd_all],
+
+    axis=1
+
+)
+
+counts = msd_df.count(axis=1).values
+
+mask_good = counts > 5
+
+
+
+msd_mean = msd_df.mean(axis=1).values
+msd_std = (
+    msd_df.std(axis=1)
+    /
+    np.sqrt(msd_df.count(axis=1))
+).values
+
+tau = np.arange(1, len(msd_mean)+1) / fps
+
+tau = tau[mask_good]
+msd_mean = msd_mean[mask_good]
+msd_std = msd_std[mask_good]
+
+
+#plateau esperado desde equipartición
+
+plateau_r = 2 * (
+    kB*T/kappa_x_mean
+    +
+    kB*T/kappa_y_mean
+)
+
+plateau_r *= 1e12
+
+
+#trayectorias
+
+fig, ax = plt.subplots(figsize=(6,6))
+
+ax.scatter(
+    x_total,
+    y_total,
+    s=5,
+    alpha=0.3
+)
+
+ax.set_xlabel('x [µm]')
+ax.set_ylabel('y [µm]')
+
+ax.set_title('Posiciones confinadas')
+
+ax.set_aspect('equal')
+
+plt.tight_layout()
+
+plt.savefig(
+    '/content/trayectorias_confinadas.png',
+    dpi=300
+)
+
+plt.show()
+
+
+#msd atrapadas
+
+fig, ax = plt.subplots(figsize=(7,5))
+
+ax.fill_between(
+    tau,
+    msd_mean - msd_std,
+    msd_mean + msd_std,
+    alpha=0.2
+)
+
+ax.plot(
+    tau,
+    msd_mean,
+    lw=2,
+    label='MSD ensemble'
+)
+
+ax.axhline(
+    plateau_r,
+    color='crimson',
+    linestyle='--',
+    label='Meseta esperada'
+)
+
+ax.set_xscale('log')
+
+ax.set_xlabel(r'Lag time $\tau$ [s]')
+ax.set_ylabel(r'MSD [$\mu m^2$]')
+ax.set_xlim(0, 5.3)
+ax.set_title('MSD de partícula atrapada')
+
+ax.legend()
+
+plt.tight_layout()
+
+plt.savefig(
+    '/content/msd_atrapada.png',
+    dpi=300
+)
+
+plt.show()
+
+#anisotropía de la trampa
+
+fig, ax = plt.subplots(figsize=(5,5))
+
+vals = [
+    kappa_x_mean * 1e6,
+    kappa_y_mean * 1e6
+]
+
+errs = [
+    kappa_x_std * 1e6,
+    kappa_y_std * 1e6
+]
+
+ax.bar(
+    ['κx', 'κy'],
+    vals,
+    yerr=errs,
+    capsize=5,
+    alpha=0.85
+)
+
+ax.set_ylabel(r'Rigidez [$\mu N/m$]')
+
+ax.set_title('Rigidez de la trampa')
+
+plt.tight_layout()
+
+plt.savefig(
+    '/content/rigidez_trampa.png',
+    dpi=300
+)
+
+plt.show()
+
+
+#potencial efectivo
+
+fig, axes = plt.subplots(1,2, figsize=(10,4))
+
+for ax, data, label in zip(
+    axes,
+    [x_total, y_total],
+    ['x', 'y']
+):
+
+    data = np.array(data)
+
+    hist, bins = np.histogram(
+        data,
+        bins=40,
+        density=True
+    )
+
+    centers = 0.5 * (bins[1:] + bins[:-1])
+
+    mask = hist > 0
+
+    U = -kB * T * np.log(hist[mask])
+
+    # normalizar mínimo
+    U = U - np.min(U)
+
+    # J → kBT
+    U = U / (kB * T)
+
+    ax.plot(
+        centers[mask],
+        U,
+        'o-',
+        lw=1.5
+    )
+
+    ax.set_xlabel(f'{label} [µm]')
+    ax.set_ylabel(r'$U/k_B T$')
+
+
+    ax.set_title(
+        f'Potencial efectivo en {label}'
+    )
+
+plt.tight_layout()
+
+plt.savefig(
+    '/content/potencial_efectivo.png',
+    dpi=300
+)
+
+plt.show()
+
+
+#resumen de todo
+
+print('\nRESUMEN FINAL\n')
+
+print(f'κx = {kappa_x_mean*1e6:.2f} μN/m')
+print(f'κy = {kappa_y_mean*1e6:.2f} μN/m')
+
+print(f'\nκx/κy = {anisotropia:.2f}')
+
+print(f'\nMSD plateau esperado:')
+print(f'{plateau_r:.3f} µm²')
+
+#eof
