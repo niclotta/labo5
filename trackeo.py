@@ -6,7 +6,7 @@ Created on Tue Apr 21 20:16:22 2026
 @author: nclotta
 """
 
-# Time-stamp: </Users/nclotta/Documents/__UBA/__LABO_5_CINCO/pinzas/trackeo.py, 2026-05-02 Saturday 17:59:36 nclotta>
+# Time-stamp: </Users/nclotta/Documents/__UBA/__LABO_5_CINCO/pinzas/trackeo.py, 2026-05-10 Sunday 23:30:57 nclotta>
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -25,7 +25,8 @@ import datasets
 def g(img):
     return img[:, :, 1]
 
-def track_vid(v_in, data, graph=False, imgpath="./img", mem=40, sr=0):
+def track_vid(v_in, data, graph=False, imgpath="./img", csvpath="./csv",
+              mem=40, sr=0, savetofile=False):
   frames = pims.open(v_in)
   tp.quiet()
   if sr == 0:
@@ -35,6 +36,11 @@ def track_vid(v_in, data, graph=False, imgpath="./img", mem=40, sr=0):
   q = tp.link(tp.batch(list(g(frames)), invert=True,
                        diameter=data[0], threshold=data[1],
                        minmass=data[2]), search_range=search_range, memory=mem)
+  d = tp.compute_drift(q)
+  q = q[q['particle'].isin(data[3])]
+  if savetofile:
+    q.to_csv(f"{csvpath}/{Path(v_in).stem}_trajs.csv")
+    d.to_csv(f"{csvpath}/{Path(v_in).stem}_drift.csv")
   if graph:
 #    plt.hist(q['particle'], bins=q['particle'].max(), ec='r', color='skyblue')
 #    plt.savefig(f"{imgpath}/{Path(v_in).stem}_histo_parts.png", dpi=300)
@@ -58,15 +64,17 @@ def track_vid(v_in, data, graph=False, imgpath="./img", mem=40, sr=0):
       tp.plot_traj(q[q['particle'] == j], ax=ax2)
       plt.savefig(f"{imgpath}/{Path(v_in).stem}_part_{j}.png", dpi=300)
       plt.close()
-  return q
+  return q, d
 
 if __name__ == '__main__':
+  if not os.path.exists(f"./csv"):
+    os.makedirs(f"./csv")
   for dataset in datasets.todo:
     for n in range(len(dataset[0])):
       if dataset[0][n][0] > 0:
         if not os.path.exists(f"./img/{dataset[1]}"):
           os.makedirs(f"./img/{dataset[1]}")
         track_vid(f"data/{dataset[1]}_{n}.avi", dataset[0][n], graph=True,
-                  imgpath=f"./img/{dataset[1]}", mem=dataset[2], sr=dataset[3])
+                  imgpath=f"./img/{dataset[1]}", savetofile=False, mem=dataset[2], sr=dataset[3])
 
 # eof
