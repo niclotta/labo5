@@ -7,3 +7,7 @@ informe/
 docs/
 papers/
 __pycache__/
+csv/
+content
+results/
+rawimg.png
