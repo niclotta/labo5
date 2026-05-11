@@ -74,4 +74,129 @@ for nombre_dataset, archivos_dataset in datasets_trajs.items():
     plt.savefig(f'/content/qqplots_{nombre_dataset}.png', dpi=300)
     plt.show()
 
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
+
+plt.style.use('seaborn-v0_8-whitegrid')
+um_per_px = 1 / 11.1943
+fps = 15
+lags_a_testear = [1, 2, 4, 8, 16, 32]
+
+archivos_trajs = glob.glob('/content/*_trajs.csv')
+
+print(f"Archivos de trayectorias: {len(archivos_trajs)}")
+
+def obtener_desplazamientos_trajs(archivos, lag):
+    dx_total = []
+
+    for archivo in archivos:
+        df = pd.read_csv(archivo, index_col=0)
+
+        if df.isnull().all().all():
+            continue
+
+        for pid, grupo in df.groupby('particle'):
+            grupo = grupo.sort_values('frame')
+
+            x = grupo['x'].values * um_per_px
+
+            if len(x) <= lag:
+                continue
+
+            dx = x[lag:] - x[:-lag]
+            dx_total.extend(dx)
+
+    return np.array(dx_total)
+
+datasets_trajs = {
+    rf'Datos con $\eta_2$': [f for f in archivos_trajs if 'latex25' in f],
+
+    rf'Datos con $\eta_3$': [f for f in archivos_trajs if 'latex33' in f],
+
+    rf'Datos con $\eta_4$': [f for f in archivos_trajs if 'latex100' in f],
+
+    rf'Datos con $\eta_1$': [f for f in archivos_trajs if 'sinlaser' in f],
+}
+
+
+
+taus = np.array(lags_a_testear) / fps
+
+norm = mcolors.LogNorm(vmin=taus.min(), vmax=taus.max())
+cmap = cm.viridis
+
+
+
+for nombre_dataset, archivos_dataset in datasets_trajs.items():
+
+    if not archivos_dataset:
+        print(f"No se encontró nada para {nombre_dataset}")
+        continue
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+
+    print(f"\nDATASET: {nombre_dataset}")
+
+    for lag in lags_a_testear:
+
+        dx = obtener_desplazamientos_trajs(archivos_dataset, lag)
+
+        dx = (dx - np.mean(dx)) / np.std(dx)
+
+        if len(dx) < 20:
+            continue
+
+        tau = lag / fps
+
+        # QQ data
+        (osm, osr), (slope, intercept, r) = probplot(dx, dist="norm")
+
+        color = cmap(norm(tau))
+
+        ax.plot(
+            osm,
+            osr,
+            'o',
+            ms=2,
+            alpha=0.2,
+            color=color,
+            label=f'τ={tau:.2f}s'
+        )
+
+        s = skew(dx)
+        k = kurtosis(dx, fisher=False)
+
+        print(
+            f"τ={tau:.2f}s | "
+            f"N={len(dx)} | "
+            f"skew={s:.3f} | "
+            f"kurt={k:.3f} | "
+            f"r={r:.4f}"
+        )
+
+    # Recta gaussiana ideal
+    xline = np.linspace(-4, 4, 200)
+    ax.plot(osm, osm, 'k--', lw=2)
+
+    # Colorbar
+    sm = cm.ScalarMappable(norm=norm, cmap=cmap)
+    cbar = plt.colorbar(sm, ax=ax)
+    cbar.set_label(r'$\tau$ [s]')
+
+    ax.set_title(f'Comparación de cuantiles — {nombre_dataset}')
+    ax.set_xlabel('Cuantiles teóricos')
+    ax.set_ylabel('Cuantiles experimentales')
+
+    ax.grid(alpha=0.3)
+
+    plt.tight_layout()
+
+    plt.savefig(
+        f'/content/qqplots_superpuestos_final_{nombre_dataset}.png',
+        dpi=300,
+        bbox_inches='tight'
+    )
+
+    plt.show()
+
     # eof
