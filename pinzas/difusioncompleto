@@ -5,7 +5,7 @@
 Ajusta todo lo de difusión: ley de potencias, lineal, después compara las alpha y
 calcula la dimensión fractal. Funciona con los archivos que traen las trayectorias.
 """
-!pip install trackpy
+
 import glob
 import numpy as np
 import pandas as pd
@@ -24,10 +24,10 @@ max_lagtime = 50
 plt.style.use('seaborn-v0_8-whitegrid')
 
 colores = {
-    'Datos con $\eta_1$': 'steelblue',
-    'Datos con $\eta_2$':  'seagreen',
-    'Datos con $\eta_3$':  'orange',
-    'Datos con $\eta_4$': 'crimson',
+    '$\eta_1$': 'steelblue',
+    '$\eta_2$':  'seagreen',
+    '$\eta_3$':  'orange',
+    '$\eta_4$': 'crimson',
 }
 
 
@@ -35,17 +35,17 @@ colores = {
 #Archivos
 
 
-archivos_trajs = glob.glob('/content/*_trajs.csv')
+archivos_trajs = glob.glob('./content/*_trajs.csv')
 
 datasets = {
 
-    rf'Datos con $\eta_1$': [f for f in archivos_trajs if 'sinlaser' in f],
+    rf'$\eta_1$': [f for f in archivos_trajs if 'sinlaser' in f],
 
-    rf'Datos con $\eta_2$': [f for f in archivos_trajs if 'latex25' in f],
+    rf'$\eta_2$': [f for f in archivos_trajs if 'latex25' in f],
 
-    rf'Datos con $\eta_3$': [f for f in archivos_trajs if 'latex33' in f],
+    rf'$\eta_3$': [f for f in archivos_trajs if 'latex33' in f],
 
-    rf'Datos con $\eta_4$': [f for f in archivos_trajs if 'latex100' in f]
+    rf'$\eta_4$': [f for f in archivos_trajs if 'latex100' in f]
 
 
 }
@@ -159,10 +159,10 @@ resultados = {}
 
 print(f"\n{'Dataset':<25} {'α':>8} {'R²':>8}")
 print("-" * 43)
-
+i=1
 for nombre, archivos in datasets.items():
 
-    corregir = nombre != r'Datos con $\eta_1$'
+    corregir = nombre != r'$\eta_1$'
 
     datos = calcular_msd_ensemble(
         archivos,
@@ -187,9 +187,9 @@ for nombre, archivos in datasets.items():
     ax.plot(
         datos['tau'], datos['mean'],
         lw=2, color=colores[nombre],
-        label=rf"{nombre} — $\alpha={fit['alpha']:.2f}$"
+        label=rf"$\alpha_{i}={fit['alpha']:.2f}\pm0.02$"
     )
-
+    i += 1
     tau_fit = np.logspace(
         np.log10(datos['tau'][fit['mask']][0]),
         np.log10(datos['tau'][fit['mask']][-1]),
@@ -202,12 +202,14 @@ for nombre, archivos in datasets.items():
 ax.set_xscale('log')
 ax.set_yscale('log')
 ax.set_xlim(0.05, 5)
-ax.set_xlabel(r'Lag time $\tau$ [s]')
-ax.set_ylabel(r'MSD ensemble [$\mu m^2$]')
-ax.set_title('MSD ensemble — difusión anómala')
-ax.legend()
+ax.set_xlabel(r'$\tau$ [s]', fontsize=18)
+ax.set_ylabel(r'MSD ensemble [$\mathrm{\mu m}^2$]', fontsize=18)
+ax.tick_params(axis='y', labelsize=14)
+ax.tick_params(axis='x', labelsize=14)
+#ax.set_title('MSD ensemble — difusión anómala')
+ax.legend(prop={'size': 18})
 plt.tight_layout()
-plt.savefig('/content/msd_alpha_final.png', dpi=300)
+plt.savefig('./img/msd_alpha_final.png', dpi=150)
 plt.show()
 
 #MSD lineal con ajuste del D.
@@ -223,7 +225,7 @@ D_resultados = {}
 
 for ax, (nombre, archivos) in zip(axes.flatten(), datasets.items()):
 
-    corregir = nombre != r'Datos con $\eta_1$'
+    corregir = nombre != r'$\eta_1$'
 
     datos = calcular_msd_ensemble(
         archivos,
@@ -276,7 +278,7 @@ plt.suptitle(
     fontsize=13
 )
 plt.tight_layout()
-plt.savefig('/content/msd_lineal.png', dpi=300)
+plt.savefig('./img/msd_lineal.png', dpi=300)
 plt.show()
 
 #valores del agua pura para comparar
@@ -289,7 +291,7 @@ print(f"Referencia — η agua pura: 0.89 mPa·s")
 #figura resumen
 
 
-fig, axes = plt.subplots(1, 2, figsize=(15,5))
+fig, axes = plt.subplots(2, 1, figsize=(12,8))
 
 
 #alpha
@@ -316,19 +318,20 @@ ax.axhline(
     1,
     color='k',
     linestyle='--',
-    alpha=0.5
+    alpha=0.8
 )
 
-ax.set_ylabel(r'Exponente $\alpha$')
-ax.set_title('Difusión anómala')
-
+ax.set_ylabel(r'$\alpha$',fontsize=28)
+ax.set_title('Difusión anómala', fontsize=28)
+ax.tick_params(axis='x', labelsize=24)
+ax.tick_params(axis='y', labelsize=24)
 for bar, val in zip(bars, alphas):
 
     ax.text(
         bar.get_x() + bar.get_width()/2,
         val + 0.02,
         f'{val:.2f}',
-        ha='center'
+        ha='center', fontsize=24
     )
 
 
@@ -359,27 +362,28 @@ ax.axhline(
     1.5,
     color='k',
     linestyle='--',
-    alpha=0.5
+    alpha=0.8
 )
 
-ax.set_ylabel(r'$D_f = 2 - \alpha/2$')
-ax.set_title('Dimensión fractal')
-
+ax.set_ylabel(r'$D_f = 2 - \alpha/2$',fontsize=28)
+ax.set_title('\n\n\nDimensión fractal',fontsize=28)
+ax.tick_params(axis='x', labelsize=24)
+ax.tick_params(axis='y', labelsize=24)
 for bar, val in zip(bars, vals_frac):
 
     ax.text(
         bar.get_x() + bar.get_width()/2,
         val + 0.02,
         f'{val:.2f}',
-        ha='center'
+        ha='center', fontsize=24
     )
 
 
 plt.tight_layout()
 
 plt.savefig(
-    '/content/resumen_difusion_final.png',
-    dpi=300
+    './img/resumen_difusion_final.png'#,
+#    dpi=150
 )
 
 plt.show()

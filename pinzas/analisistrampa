@@ -43,13 +43,13 @@ um_to_m = 1e-6
 
 archivos_trampa = [
 
-    '/content/particulaatrapada_10_trajs.csv',
-    '/content/particulaatrapada_11_trajs.csv',
-    '/content/particulaatrapada_12_trajs.csv',
-    '/content/particulaatrapada_2_trajs.csv',
-    '/content/particulaatrapada_3_trajs.csv',
-    '/content/atrapada_0_trajs.csv',
-    '/content/atrapada_1_trajs.csv',
+    './content/particulaatrapada_10_trajs.csv',
+    './content/particulaatrapada_11_trajs.csv',
+    './content/particulaatrapada_12_trajs.csv',
+    './content/particulaatrapada_2_trajs.csv',
+    './content/particulaatrapada_3_trajs.csv',
+    './content/atrapada_0_trajs.csv',
+    './content/atrapada_1_trajs.csv',
 
 ]
 
@@ -236,7 +236,7 @@ ax.set_aspect('equal')
 plt.tight_layout()
 
 plt.savefig(
-    '/content/trayectorias_confinadas.png',
+    './img/trayectorias_confinadas.png',
     dpi=300
 )
 
@@ -270,18 +270,21 @@ ax.axhline(
 
 ax.set_xscale('log')
 
-ax.set_xlabel(r'Lag time $\tau$ [s]')
-ax.set_ylabel(r'MSD [$\mu m^2$]')
-ax.set_xlim(0, 5.3)
-ax.set_title('MSD de partícula atrapada')
+ax.set_xlabel(r'$\tau$ [s]', fontsize=18)
+ax.set_ylabel(r'MSD [$\mu m^2$]', fontsize=18)
+ax.tick_params(axis='y', labelsize=14)
+ax.tick_params(axis='x', labelsize=14)
 
-ax.legend()
+ax.set_xlim(0, 5.3)
+#ax.set_title('MSD de partícula atrapada')
+
+ax.legend(fontsize=18)
 
 plt.tight_layout()
 
 plt.savefig(
-    '/content/msd_atrapada.png',
-    dpi=300
+    './img/msd_atrapada.png',
+    dpi=200
 )
 
 plt.show()
@@ -315,7 +318,7 @@ ax.set_title('Rigidez de la trampa')
 plt.tight_layout()
 
 plt.savefig(
-    '/content/rigidez_trampa.png',
+    './img/rigidez_trampa.png',
     dpi=300
 )
 
@@ -370,7 +373,7 @@ for ax, data, label in zip(
 plt.tight_layout()
 
 plt.savefig(
-    '/content/potencial_efectivo.png',
+    './img/potencial_efectivo.png',
     dpi=300
 )
 
