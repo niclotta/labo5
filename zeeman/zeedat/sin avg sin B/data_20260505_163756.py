@@ -743,9 +743,3 @@ params={
         "lock_ctrl_aux_lock_trig_rise": 1, 
         "lock_mod_harmonic_on": 1
 }
-
-plt.plot(t1, ch1, label="dataset 1")
-plt.plot(t2, ch2, label="dataset 2")
-#plt.xlim([-5,5])
-plt.legend()
-plt.show()
