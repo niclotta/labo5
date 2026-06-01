@@ -1,0 +1,94 @@
+import importlib.util, pathlib
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
+from scipy.signal import find_peaks, savgol_filter
+
+def cargar(filepath):
+    fp = pathlib.Path(filepath)
+    spec = importlib.util.spec_from_file_location(fp.stem, fp)
+    mod  = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+ARCHIVO = sinBconavg[12] #name interno de mi código pero van esos, sirve para archivos con B tmb calculo
+d  = cargar(ARCHIVO)
+t  = np.asarray(d.t1)
+ch = np.asarray(d.ch1)
+n  = len(t)
+
+
+n_ext = int(n * 0.15)
+mask  = np.zeros(n, dtype=bool)
+mask[:n_ext] = mask[-n_ext:] = True
+rampa = np.polyval(np.polyfit(t[mask], ch[mask], 1), t)
+señal = ch - rampa
+
+señal_suave = savgol_filter(señal, 11, 3)
+
+#find peaks
+
+idx_todos, props = find_peaks(-señal_suave, height=0.002, distance=30)
+orden  = np.argsort(props['peak_heights'])[::-1]
+top4   = np.sort(idx_todos[orden[:4]])
+
+#ajuste
+
+def gaussiana(t, A, t0, sigma, C):
+    return C - A * np.exp(-(t - t0)**2 / (2 * sigma**2))
+
+VENTANA = {3: 8}          
+
+centros, errores = [], []
+fig, axes = plt.subplots(1, 4, figsize=(12, 3))
+
+for k, idx in enumerate(top4):
+    V  = VENTANA.get(k, 30)
+    sl = slice(max(0, idx - V), min(n, idx + V))
+    tv = t[sl]
+    cv = savgol_filter(señal[sl], 9, 2)
+
+    p0   = [abs(cv.min()), tv[cv.argmin()], (t[-1] - t[0]) * 0.01, 0]
+    popt, pcov = curve_fit(gaussiana, tv, cv, p0=p0, maxfev=5000)
+
+    centros.append(popt[1])
+    errores.append(np.sqrt(np.diag(pcov))[1])
+
+    tf = np.linspace(tv[0], tv[-1], 200)
+    axes[k].plot(tv, cv, '.')
+    axes[k].plot(tf, gaussiana(tf, *popt))
+    axes[k].axvline(popt[1], color='r', lw=0.8)
+
+plt.tight_layout()
+plt.show()
+
+centros = np.array(centros)
+errores = np.array(errores)
+
+#calibración
+#   87Rb F=2 F', 85Rb F=3 F', 85Rb F=2 F', 87Rb F=1 F'
+#dos externos SEP_87Rb.
+
+SEP_87Rb = 6.834682610904e9   # Hz (separación HFS fundamental 87Rb)
+
+dt     = np.diff(centros)
+dt_tot = centros[-1] - centros[0]
+
+#frecuencias proporcionales al barrido, ancladas en 0 y SEP_87Rb
+f = SEP_87Rb * np.array([0, dt[0], dt[0] + dt[1], dt_tot]) / dt_tot
+
+coef = np.polyfit(centros, f, 1)
+cal  = np.poly1d(coef)
+
+print(f"Escala: {coef[0]/1e9:.4f} GHz/u.t.")
+print(f"Residuos (MHz): {(cal(centros) - f)/1e6}")
+
+plt.figure(figsize=(6, 3))
+plt.errorbar(centros, f / 1e9, xerr=errores, fmt='o', label='datos')
+t_fit = np.linspace(centros[0], centros[-1], 300)
+plt.plot(t_fit, cal(t_fit) / 1e9, '--', label='lineal')
+plt.xlabel("tiempo (u.t.)")
+plt.ylabel("frecuencia (GHz)")
+plt.legend()
+plt.tight_layout()
+plt.show()
