@@ -1,20 +1,18 @@
+#!/usr/bin/env python3
+
 import importlib.util, pathlib
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from scipy.signal import find_peaks, savgol_filter
 
-def cargar(filepath):
-    fp = pathlib.Path(filepath)
-    spec = importlib.util.spec_from_file_location(fp.stem, fp)
-    mod  = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+import datasets
 
-ARCHIVO = sinBconavg[12] #name interno de mi código pero van esos, sirve para archivos con B tmb calculo
-d  = cargar(ARCHIVO)
+d  = datasets.select['sin avg sin B DAVS monitor menos ds1 26 del 5'][12][0]
+#d  = datasets.select['sin avg sin B 5 del 5'][12][0]
 t  = np.asarray(d.t1)
-ch = np.asarray(d.ch1)
+#ch = np.asarray(d.ch1)
+ch = np.asarray(d.ch2)
 n  = len(t)
 
 
@@ -58,9 +56,9 @@ for k, idx in enumerate(top4):
     axes[k].plot(tv, cv, '.')
     axes[k].plot(tf, gaussiana(tf, *popt))
     axes[k].axvline(popt[1], color='r', lw=0.8)
-
-plt.tight_layout()
-plt.show()
+if __name__ == '__main__':
+    plt.tight_layout()
+    plt.show()
 
 centros = np.array(centros)
 errores = np.array(errores)
@@ -80,15 +78,16 @@ f = SEP_87Rb * np.array([0, dt[0], dt[0] + dt[1], dt_tot]) / dt_tot
 coef = np.polyfit(centros, f, 1)
 cal  = np.poly1d(coef)
 
-print(f"Escala: {coef[0]/1e9:.4f} GHz/u.t.")
-print(f"Residuos (MHz): {(cal(centros) - f)/1e6}")
 
-plt.figure(figsize=(6, 3))
-plt.errorbar(centros, f / 1e9, xerr=errores, fmt='o', label='datos')
-t_fit = np.linspace(centros[0], centros[-1], 300)
-plt.plot(t_fit, cal(t_fit) / 1e9, '--', label='lineal')
-plt.xlabel("tiempo (u.t.)")
-plt.ylabel("frecuencia (GHz)")
-plt.legend()
-plt.tight_layout()
-plt.show()
+print(f"Escala: {coef[0]/1e9:.4f} GHz/u.t.")
+#    print(f"Residuos (MHz): {(cal(centros) - f)/1e6}")
+if __name__ == '__main__':
+    plt.figure(figsize=(6, 3))
+    plt.errorbar(centros, f / 1e9, xerr=errores, fmt='o', label='datos')
+    t_fit = np.linspace(centros[0], centros[-1], 300)
+    plt.plot(t_fit, cal(t_fit) / 1e9, '--', label='lineal')
+    plt.xlabel("tiempo (u.t.)")
+    plt.ylabel("frecuencia (GHz)")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
